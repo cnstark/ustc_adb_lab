@@ -41,8 +41,7 @@ namespace adb {
                     std::cout << ", frame_id: " << frame_id
                               << ", not hit" << ", buffer not full" << std::endl;
                 }
-                BCB *new_bcb = new BCB(page_id, frame_id);
-                insert_bcb(new_bcb);
+                insert_bcb(page_id, frame_id);
                 lru_list->push_front(frame_id);
                 set_page_id(frame_id, page_id);
                 // 如果是写操作，则不读取page
@@ -75,8 +74,7 @@ namespace adb {
         }
         memcpy((buffer + frame_id)->field, frame->field, FRAME_SIZE);
         int page_id = dsm->create_new_page(buffer + frame_id);
-        BCB *new_bcb = new BCB(page_id, frame_id);
-        insert_bcb(new_bcb);
+        insert_bcb(page_id, frame_id);
         lru_list->push_front(frame_id);
         set_page_id(frame_id, page_id);
     }
@@ -94,32 +92,16 @@ namespace adb {
                       << ", not hit" << ", victim_page_id: " << victim_page_id;
 
             int hash = get_page_id_hash(victim_page_id);
-            BCB **p = page_to_frame + hash;
-            if ((*p)->page_id == victim_page_id) {
-                if ((*p)->dirty) {
-                    dsm->write_page(victim_page_id, buffer + frame_id);
-                    std::cout << ", dirty" << std::endl;
-                    std::cout << "    IO count: " << get_io_count();
-                }
-                auto t = (*p)->next;
-                free((*p));
-                (*p) = t;
-            } else {
-                BCB *pre = *p;
-                BCB *now = pre->next;
-                while (now != nullptr) {
-                    if (now->page_id == victim_page_id) {
-                        if (now->dirty) {
-                            dsm->write_page(victim_page_id, buffer + frame_id);
-                            std::cout << ", dirty" << std::endl;
-                            std::cout << "    IO count: " << get_io_count();
-                        }
-                        pre->next = now->next;
-                        free(now);
-                        break;
+            auto bcb_list = page_to_frame + hash;
+            for (auto i = bcb_list->begin(); i != bcb_list->end(); i++) {
+                if (i->page_id == victim_page_id) {
+                    if (i->dirty) {
+                        dsm->write_page(victim_page_id, buffer + frame_id);
+                        std::cout << ", dirty" << std::endl;
+                        std::cout << "    IO count: " << get_io_count();
                     }
-                    pre = now;
-                    now = now->next;
+                    bcb_list->erase(i);
+                    break;
                 }
             }
             lru_list->pop_back();
@@ -147,40 +129,31 @@ namespace adb {
 
     void BufferManager::clean_buffer() {
         std::cout << "Cleaning buffer" << std::endl;
-        for (BCB *bcb : page_to_frame) {
-            auto p = bcb;
-            while (p != nullptr) {
-                if (p->dirty) {
-                    dsm->write_page(p->page_id, buffer + p->frame_id);
+        for (const auto& bcb_list : page_to_frame) {
+            for (const auto & i : bcb_list) {
+                if (i.dirty) {
+                    dsm->write_page(i.page_id, buffer + i.frame_id);
                     std::cout << "    IO count: " << get_io_count() << std::endl;
                 }
-                p = p->next;
             }
         }
     }
 
     BCB *BufferManager::get_bcb(int page_id) {
         int hash = get_page_id_hash(page_id);
-        for (BCB *p = page_to_frame[hash]; p != nullptr; p = p->next) {
-            if (p->page_id == page_id) {
-                return p;
+        auto bcb_list = page_to_frame + hash;
+        for (auto & i : *bcb_list) {
+            if (i.page_id == page_id) {
+                return &i;
             }
         }
         return nullptr;
     }
 
-    void BufferManager::insert_bcb(BCB *bcb) {
-        int hash = get_page_id_hash(bcb->page_id);
-        BCB **end = &page_to_frame[hash];
-        if (*end == nullptr) {
-            *end = bcb;
-            return;
-        }
-        BCB *a = *end;
-        while (a->next != nullptr) {
-            a = a->next;
-        }
-        a->next = bcb;
+    void BufferManager::insert_bcb(int page_id, int frame_id) {
+        int hash = get_page_id_hash(page_id);
+        auto bcb_list = page_to_frame + hash;
+        bcb_list->emplace_back(page_id, frame_id);
     }
 
     int BufferManager::get_page_id(int frame_id) {

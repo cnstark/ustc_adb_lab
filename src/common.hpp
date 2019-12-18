@@ -12,11 +12,10 @@
 
 namespace adb {
     struct BCB {
-        BCB(int page_id, int frame_id) : page_id(page_id), frame_id(frame_id), dirty(false), next(nullptr) {};
+        BCB(int page_id, int frame_id) : page_id(page_id), frame_id(frame_id), dirty(false){};
         int page_id;
         int frame_id;
         bool dirty;
-        BCB *next;
     };
 
     struct Frame {

@@ -42,7 +42,8 @@ namespace adb {
         int free_frames_num;
         // Hash Table
         int frame_to_page[DEF_BUF_SIZE]{};
-        BCB *page_to_frame[DEF_BUF_SIZE]{nullptr};
+//        BCB *page_to_frame[DEF_BUF_SIZE]{nullptr};
+        list<BCB> page_to_frame[DEF_BUF_SIZE];
         // lru list
         list<int> *lru_list;
 
@@ -56,7 +57,7 @@ namespace adb {
 
         void set_page_id(int frame_id, int page_id);
 
-        void insert_bcb(BCB *bcb);
+        void insert_bcb(int page_id, int frame_id);
 
         BCB *get_bcb(int page_id);
 
