@@ -10,7 +10,7 @@
 namespace adb {
     BufferManager::BufferManager() {
         dsm = new DataStorageManager();
-        lru_list = new list<int>();
+        lru = new LRU;
         free_frames_num = DEF_BUF_SIZE;
         hit_count = 0;
     }
@@ -20,13 +20,13 @@ namespace adb {
         std::cout << "Total IO count: " << get_io_count() << std::endl;
         std::cout << "Total hit count: " << get_hit_count() << std::endl;
         delete dsm;
-        delete lru_list;
+        delete lru;
 
     }
 
     int BufferManager::fix_page(bool is_write, int page_id) {
         BCB *bcb = get_bcb(page_id);
-        std::cout << "    op: " << (is_write?"w":"r");
+        std::cout << "    op: " << (is_write ? "w" : "r");
         // buffer中不存在该page
         if (bcb == nullptr) {
             if (dsm->is_page_exist(page_id)) {
@@ -42,7 +42,7 @@ namespace adb {
                               << ", not hit" << ", buffer not full" << std::endl;
                 }
                 insert_bcb(page_id, frame_id);
-                lru_list->push_front(frame_id);
+                lru->push(frame_id);
                 set_page_id(frame_id, page_id);
                 // 如果是写操作，则不读取page
                 if (!is_write) {
@@ -54,8 +54,8 @@ namespace adb {
                 return -1; // page_id 不存在
             }
         } else {
-            int frame_id = bcb->frame_id;
-            update_lru(frame_id);
+            int frame_id = bcb->get_frame_id();
+            lru->update(frame_id);
             std::cout << ", page_id: " << page_id << ", frame_id: " << frame_id << ", hit!" << std::endl;
             inc_hit_count();
             std::cout << "    hit count: " << get_hit_count() << std::endl;
@@ -75,7 +75,7 @@ namespace adb {
         memcpy((buffer + frame_id)->field, frame->field, FRAME_SIZE);
         int page_id = dsm->create_new_page(buffer + frame_id);
         insert_bcb(page_id, frame_id);
-        lru_list->push_front(frame_id);
+        lru->push(frame_id);
         set_page_id(frame_id, page_id);
     }
 
@@ -84,31 +84,27 @@ namespace adb {
     }
 
     int BufferManager::select_victim() {
-        if (!lru_list->empty()) {
-            int frame_id = lru_list->back();
-            int victim_page_id = get_page_id(frame_id);
+        int frame_id = lru->get_victim();
+        int victim_page_id = get_page_id(frame_id);
 
-            std::cout << ", frame_id: " << frame_id
-                      << ", not hit" << ", victim_page_id: " << victim_page_id;
+        std::cout << ", frame_id: " << frame_id
+                  << ", not hit" << ", victim_page_id: " << victim_page_id;
 
-            int hash = get_page_id_hash(victim_page_id);
-            auto bcb_list = page_to_frame + hash;
-            for (auto i = bcb_list->begin(); i != bcb_list->end(); i++) {
-                if (i->page_id == victim_page_id) {
-                    if (i->dirty) {
-                        dsm->write_page(victim_page_id, buffer + frame_id);
-                        std::cout << ", dirty" << std::endl;
-                        std::cout << "    IO count: " << get_io_count();
-                    }
-                    bcb_list->erase(i);
-                    break;
+        int hash = get_page_id_hash(victim_page_id);
+        auto bcb_list = page_to_frame + hash;
+        for (auto i = bcb_list->begin(); i != bcb_list->end(); i++) {
+            if (i->get_page_id() == victim_page_id) {
+                if (i->is_dirty()) {
+                    dsm->write_page(victim_page_id, buffer + frame_id);
+                    std::cout << ", dirty" << std::endl;
+                    std::cout << "    IO count: " << get_io_count();
                 }
+                bcb_list->erase(i);
+                break;
             }
-            lru_list->pop_back();
-            std::cout << std::endl;
-            return frame_id;
         }
-        return 0;
+        std::cout << std::endl;
+        return frame_id;
     }
 
     int BufferManager::get_page_id_hash(int page_id) {
@@ -118,21 +114,21 @@ namespace adb {
     void BufferManager::set_dirty(int frame_id) {
         int page_id = get_page_id(frame_id);
         BCB *bcb = get_bcb(page_id);
-        bcb->dirty = true;
+        bcb->set_dirty();
     }
 
     void BufferManager::unset_dirty(int frame_id) {
         int page_id = get_page_id(frame_id);
         BCB *bcb = get_bcb(page_id);
-        bcb->dirty = false;
+        bcb->unset_dirty();
     }
 
     void BufferManager::clean_buffer() {
         std::cout << "Cleaning buffer" << std::endl;
-        for (const auto& bcb_list : page_to_frame) {
-            for (const auto & i : bcb_list) {
-                if (i.dirty) {
-                    dsm->write_page(i.page_id, buffer + i.frame_id);
+        for (const auto &bcb_list : page_to_frame) {
+            for (const auto &i : bcb_list) {
+                if (i.is_dirty()) {
+                    dsm->write_page(i.get_page_id(), buffer + i.get_frame_id());
                     std::cout << "    IO count: " << get_io_count() << std::endl;
                 }
             }
@@ -142,8 +138,8 @@ namespace adb {
     BCB *BufferManager::get_bcb(int page_id) {
         int hash = get_page_id_hash(page_id);
         auto bcb_list = page_to_frame + hash;
-        for (auto & i : *bcb_list) {
-            if (i.page_id == page_id) {
+        for (auto &i : *bcb_list) {
+            if (i.get_page_id() == page_id) {
                 return &i;
             }
         }
@@ -179,16 +175,6 @@ namespace adb {
 
     int BufferManager::get_io_count() {
         return dsm->get_io_count();
-    }
-
-    void BufferManager::update_lru(int frame_id) {
-        for (auto i = lru_list->begin(); i != lru_list->end(); i++) {
-            if (*i == frame_id) {
-                lru_list->erase(i);
-                break;
-            }
-        }
-        lru_list->push_front(frame_id);
     }
 
     void BufferManager::inc_hit_count() {

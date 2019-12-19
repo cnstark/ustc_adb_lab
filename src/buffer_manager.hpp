@@ -42,10 +42,9 @@ namespace adb {
         int free_frames_num;
         // Hash Table
         int frame_to_page[DEF_BUF_SIZE]{};
-//        BCB *page_to_frame[DEF_BUF_SIZE]{nullptr};
         list<BCB> page_to_frame[DEF_BUF_SIZE];
         // lru list
-        list<int> *lru_list;
+        LRU *lru;
 
         int hit_count;
 
@@ -62,12 +61,6 @@ namespace adb {
         BCB *get_bcb(int page_id);
 
         int select_victim();
-
-        /**
-         * 将frame标记为最新使用，从list中移动至头部
-         * @param frame_id
-         */
-        void update_lru(int frame_id);
 
         void set_dirty(int frame_id);
 
