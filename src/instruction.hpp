@@ -19,11 +19,7 @@ namespace adb {
             int sp = s.find(',');
             std::string a = s.substr(0, sp);
             std::string b = s.substr(sp + 1, s.length());
-            if (a == std::string("1")) {
-                is_write = true;
-            } else {
-                is_write = false;
-            }
+            is_write = a == std::string("1");
             page_id = std::stoi(b);
         }
 
