@@ -24,6 +24,23 @@ namespace adb {
 
     }
 
+    Frame::sptr BufferManager::read_page(int page_id) {
+        int frame_id = fix_page(false, page_id);
+        auto frame = std::make_shared<Frame>();
+        memcpy(frame->field, (buffer + frame_id)->field, FRAME_SIZE);
+        return frame;
+    }
+
+    void BufferManager::write_page(int page_id, const Frame::sptr &frame) {
+        int frame_id = fix_page(true, page_id);
+        memcpy((buffer + frame_id)->field, frame->field, FRAME_SIZE);
+        set_dirty(frame_id);
+    }
+
+    int BufferManager::fix_page(int page_id) {
+        return fix_page(false, page_id);
+    }
+
     int BufferManager::fix_page(bool is_write, int page_id) {
         BCB *bcb = get_bcb(page_id);
         std::cout << "    op: " << (is_write ? "w" : "r");
@@ -79,8 +96,8 @@ namespace adb {
         set_page_id(frame_id, page_id);
     }
 
-    int BufferManager::get_free_frames_num() {
-        return free_frames_num;
+    int BufferManager::hash_func(int page_id) {
+        return page_id % DEF_BUF_SIZE;
     }
 
     int BufferManager::select_victim() {
@@ -90,7 +107,7 @@ namespace adb {
         std::cout << ", frame_id: " << frame_id
                   << ", not hit" << ", victim_page_id: " << victim_page_id;
 
-        int hash = get_page_id_hash(victim_page_id);
+        int hash = hash_func(victim_page_id);
         auto bcb_list = page_to_frame + hash;
         for (auto i = bcb_list->begin(); i != bcb_list->end(); i++) {
             if (i->get_page_id() == victim_page_id) {
@@ -107,8 +124,16 @@ namespace adb {
         return frame_id;
     }
 
-    int BufferManager::get_page_id_hash(int page_id) {
-        return page_id % DEF_BUF_SIZE;
+    void BufferManager::clean_buffer() {
+        std::cout << "Cleaning buffer" << std::endl;
+        for (const auto &bcb_list : page_to_frame) {
+            for (const auto &i : bcb_list) {
+                if (i.is_dirty()) {
+                    dsm->write_page(i.get_page_id(), buffer + i.get_frame_id());
+                    std::cout << "    IO count: " << get_io_count() << std::endl;
+                }
+            }
+        }
     }
 
     void BufferManager::set_dirty(int frame_id) {
@@ -123,20 +148,8 @@ namespace adb {
         bcb->unset_dirty();
     }
 
-    void BufferManager::clean_buffer() {
-        std::cout << "Cleaning buffer" << std::endl;
-        for (const auto &bcb_list : page_to_frame) {
-            for (const auto &i : bcb_list) {
-                if (i.is_dirty()) {
-                    dsm->write_page(i.get_page_id(), buffer + i.get_frame_id());
-                    std::cout << "    IO count: " << get_io_count() << std::endl;
-                }
-            }
-        }
-    }
-
     BCB *BufferManager::get_bcb(int page_id) {
-        int hash = get_page_id_hash(page_id);
+        int hash = hash_func(page_id);
         auto bcb_list = page_to_frame + hash;
         for (auto &i : *bcb_list) {
             if (i.get_page_id() == page_id) {
@@ -147,7 +160,7 @@ namespace adb {
     }
 
     void BufferManager::insert_bcb(int page_id, int frame_id) {
-        int hash = get_page_id_hash(page_id);
+        int hash = hash_func(page_id);
         auto bcb_list = page_to_frame + hash;
         bcb_list->emplace_back(page_id, frame_id);
     }
@@ -160,17 +173,8 @@ namespace adb {
         frame_to_page[frame_id] = page_id;
     }
 
-    Frame::sptr BufferManager::read_page(int page_id) {
-        int frame_id = fix_page(false, page_id);
-        auto frame = std::make_shared<Frame>();
-        memcpy(frame->field, (buffer + frame_id)->field, FRAME_SIZE);
-        return frame;
-    }
-
-    void BufferManager::write_page(int page_id, const Frame::sptr &frame) {
-        int frame_id = fix_page(true, page_id);
-        memcpy((buffer + frame_id)->field, frame->field, FRAME_SIZE);
-        set_dirty(frame_id);
+    int BufferManager::get_free_frames_num() {
+        return free_frames_num;
     }
 
     int BufferManager::get_io_count() {

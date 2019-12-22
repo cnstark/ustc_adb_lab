@@ -16,6 +16,11 @@ namespace adb {
     public:
         typedef std::shared_ptr<std::vector<Instruction>> vector;
 
+        /**
+         * 将指令字符串转换为指令
+         * ","前为操作，0为读，1为写
+         * ","后为所操作的page_id
+         */
         explicit Instruction(const std::string &s) {
             int sp = s.find(',');
             std::string a = s.substr(0, sp);
@@ -24,13 +29,24 @@ namespace adb {
             page_id = std::stoi(b);
         }
 
+        /**
+         * 直接构造指令
+         * @param is_write 是否为写
+         */
         Instruction(bool is_write, int page_id) : is_write(is_write), page_id(page_id) {};
 
+        /**
+         * 重载<<运算符，输出指令内容
+         */
         friend std::ostream &operator<<(std::ostream &os, const Instruction &i) {
             os << "Instruction(" << (i.is_write ? "write," : "read,") << i.page_id << ")";
             return os;
         }
 
+        /**
+         * 执行指令
+         * @param bm BufferManager的shared_ptr
+         */
         void execute(const BufferManager::sptr &bm) {
             if (is_write) {
                 auto new_frame = generate_random_frame();
@@ -40,6 +56,10 @@ namespace adb {
             }
         };
 
+        /**
+         * 从指令文件中读取指令，生成vector
+         * @param filename 指令文件名
+         */
         static Instruction::vector read_instructions(const std::string &filename) {
             std::ifstream test_file(filename);
             assert(test_file.is_open());

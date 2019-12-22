@@ -19,25 +19,8 @@ namespace adb {
         close_file();
     }
 
-    void DataStorageManager::open_file() {
-        db_file = fopen(DB_FILE_PATH, "rb+");
-        if (db_file == nullptr) {
-            db_file = fopen(DB_FILE_PATH, "wb+");
-            char temp[FIRST_PAGE_SIZE] = {0};
-            fwrite(&temp, FIRST_PAGE_SIZE * sizeof(char), 1, db_file);
-            close_file();
-            db_file = fopen(DB_FILE_PATH, "rb+");
-            assert(db_file != nullptr);
-        }
-    }
-
-    int DataStorageManager::close_file() {
-        if (fclose(db_file) == -1) {
-            return -1;
-        } else {
-            db_file = nullptr;
-            return 0;
-        }
+    bool DataStorageManager::is_page_exist(int page_id) {
+        return page_id > 0 && page_id <= first_page[0] && get_use(page_id);
     }
 
     int DataStorageManager::read_page(int page_id, Frame *frm) {
@@ -73,16 +56,39 @@ namespace adb {
         return page_id;
     }
 
+    void DataStorageManager::open_file() {
+        db_file = fopen(DB_FILE_PATH, "rb+");
+        if (db_file == nullptr) {
+            db_file = fopen(DB_FILE_PATH, "wb+");
+            char temp[FIRST_PAGE_SIZE] = {0};
+            fwrite(&temp, FIRST_PAGE_SIZE * sizeof(char), 1, db_file);
+            close_file();
+            db_file = fopen(DB_FILE_PATH, "rb+");
+            assert(db_file != nullptr);
+        }
+    }
+
+    int DataStorageManager::close_file() {
+        if (fclose(db_file) == -1) {
+            return -1;
+        } else {
+            db_file = nullptr;
+            return 0;
+        }
+    }
+
     int DataStorageManager::seek(unsigned int offset) {
         return fseek(db_file, offset, SEEK_SET);
     }
 
-    void DataStorageManager::inc_pages_num() {
-        first_page[0]++;
+    void DataStorageManager::read_first_page() {
+        seek(0);
+        fread(first_page, sizeof(int), MAX_PAGE_NUM, db_file);
     }
 
-    int DataStorageManager::get_pages_num() {
-        return first_page[0];
+    void DataStorageManager::write_first_page() {
+        seek(0);
+        fwrite(first_page, sizeof(int), MAX_PAGE_NUM, db_file);
     }
 
     unsigned int DataStorageManager::get_page_pointer(int page_id) {
@@ -105,8 +111,12 @@ namespace adb {
         return !(first_page[page_id] & 0x80000000);
     }
 
-    bool DataStorageManager::is_page_exist(int page_id) {
-        return page_id > 0 && page_id <= first_page[0] && get_use(page_id);
+    void DataStorageManager::inc_pages_num() {
+        first_page[0]++;
+    }
+
+    int DataStorageManager::get_pages_num() {
+        return first_page[0];
     }
 
     void DataStorageManager::inc_io_count() {
@@ -115,15 +125,5 @@ namespace adb {
 
     int DataStorageManager::get_io_count() {
         return io_count;
-    }
-
-    void DataStorageManager::read_first_page() {
-        seek(0);
-        fread(first_page, sizeof(int), MAX_PAGE_NUM, db_file);
-    }
-
-    void DataStorageManager::write_first_page() {
-        seek(0);
-        fwrite(first_page, sizeof(int), MAX_PAGE_NUM, db_file);
     }
 }

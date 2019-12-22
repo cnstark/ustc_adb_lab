@@ -44,8 +44,14 @@ namespace adb {
 
         ~LRU();
 
+        /**
+         * 选择一个victim，将其从链表中移出
+         */
         int get_victim();
 
+        /**
+         * 将frame放入头部
+         */
         void push(int id);
 
         /**
@@ -58,6 +64,9 @@ namespace adb {
         std::unordered_map<int, std::list<int>::iterator> *lru_map;
     };
 
+    /**
+     * 随机生成frame内容
+     */
     Frame::sptr generate_random_frame();
 }
 
