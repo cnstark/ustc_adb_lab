@@ -12,14 +12,17 @@ void init_db(const BufferManager::sptr &bm) {
     }
 }
 
+void run_test(const BufferManager::sptr &bm) {
+    auto ins_vector = Instruction::read_instructions("./data-5w-50w-zipf.txt");
+    int index = 0;
+    for (auto &i : *ins_vector) {
+        cout << index++ << ": " << i << endl;
+        i.execute(bm);
+    }
+}
+
 int main() {
     auto bm = make_shared<BufferManager>();
-    auto ins_vector = Instruction::read_instructions("./data-5w-50w-zipf.txt");
-
-    int index = 0;
-    for (auto & i : *ins_vector) {
-        cout << index++ << ": " << i << endl;
-        i .execute(bm);
-    }
+    run_test(bm);
     return 0;
 }
