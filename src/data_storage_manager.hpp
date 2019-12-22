@@ -11,6 +11,9 @@
 
 #define DB_FILE_PATH "./data.dbf"
 
+#define MAX_PAGE_NUM (50 * 1024)  //51200，一个文件存放的最大page数
+#define FIRST_PAGE_SIZE (MAX_PAGE_NUM * 4) //200kb，为第一个page的大小，存放page数与索引
+
 namespace adb {
     class DataStorageManager {
     public:
@@ -28,17 +31,15 @@ namespace adb {
 
         int get_pages_num();
 
-        unsigned int get_page_pointer(int page_id);
-
-        void set_use(int index, int use_bit);
-
-        int get_use(int index);
-
         int get_io_count();
 
     private:
         FILE *db_file;
-        int pages_num;
+
+        /**
+         * 第一个page，存放page数与指针
+         */
+        int first_page[MAX_PAGE_NUM] = {0};
 
         int io_count;
 
@@ -52,13 +53,22 @@ namespace adb {
 
         int seek(unsigned int offset);
 
-        void inc_pages_num();
+        void read_first_page();
 
-        int read_pages_num();
+        void write_first_page();
+
+        unsigned int get_page_pointer(int page_id);
+
+        void set_page_pointer(int page_id, int pointer);
+
+        void set_use(int page_id, bool is_use);
+
+        bool get_use(int page_id);
+
+        void inc_pages_num();
 
         void inc_io_count();
     };
 }
-
 
 #endif //ADB_PROJECT_DATA_STORAGE_MANAGER_HPP
