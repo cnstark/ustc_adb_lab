@@ -9,6 +9,7 @@
 #include <cstring>
 #include <iostream>
 #include <vector>
+#include <fstream>
 
 namespace adb {
     class Instruction {
@@ -23,10 +24,10 @@ namespace adb {
             page_id = std::stoi(b);
         }
 
-        Instruction(bool is_write, int page_id) : is_write(is_write), page_id(page_id){};
+        Instruction(bool is_write, int page_id) : is_write(is_write), page_id(page_id) {};
 
         friend std::ostream &operator<<(std::ostream &os, const Instruction &i) {
-            os << "Instruction(" << (i.is_write?"write,":"read,") << i.page_id << ")";
+            os << "Instruction(" << (i.is_write ? "write," : "read,") << i.page_id << ")";
             return os;
         }
 
@@ -38,6 +39,18 @@ namespace adb {
                 bm->read_page(page_id);
             }
         };
+
+        static Instruction::vector read_instructions(const std::string &filename) {
+            std::ifstream test_file(filename);
+            assert(test_file.is_open());
+            std::string line;
+            auto ins_vector = std::make_shared<std::vector<Instruction>>();
+            while (getline(test_file, line)) {
+                ins_vector->emplace_back(line);
+            }
+            return ins_vector;
+        }
+
     private:
         bool is_write;
         int page_id;
